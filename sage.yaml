@@ -1,5 +1,5 @@
 name: "sage-vision-detect"
-version: "0.1.0"
+version: "0.2.0"
 description: "Camera snapshot, YOLO/BioCLIP/Gemma4 vision, publish to Sage."
 authors: "MSA project"
 homepage: "https://github.com/waggle-sensor/sage-vision-detect-app"
