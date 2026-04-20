@@ -1,5 +1,6 @@
-# Sage / pywaggle
+# Sage / pywaggle (waggle.data.vision imports ``ffmpeg`` → PyPI package ffmpeg-python)
 pywaggle>=0.56.3
+ffmpeg-python>=0.2.0
 
 # Core CV
 numpy>=1.24
