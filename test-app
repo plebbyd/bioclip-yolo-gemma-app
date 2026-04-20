@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Local dry-run: log published metrics to ./test-run (see Sage pywaggle tutorial).
+set -euo pipefail
+cd "$(dirname "$0")"
+export PYWAGGLE_LOG_DIR="${PYWAGGLE_LOG_DIR:-test-run}"
+# Example: YOLO detection (requires ultralytics + torch)
+exec python3 main.py --debug --backend yolo --mode detect --camera "${WAGGLE_CAMERA:-left}" "$@"

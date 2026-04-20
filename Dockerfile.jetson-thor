@@ -1,0 +1,18 @@
+# Build the Thor base first (from repo root):
+#   docker build -f docker/Dockerfile.jetson-thor-plugin-base -t jetson-thor-plugin-base:local .
+# Then build this app:
+#   docker build -f sage-vision-detect-app/Dockerfile.jetson-thor -t sage-vision-detect:thor sage-vision-detect-app/
+#
+# Run with NVIDIA runtime and GPU env as in docker/Dockerfile.jetson-thor-plugin-base comments.
+
+ARG THOR_BASE=jetson-thor-plugin-base:local
+FROM ${THOR_BASE}
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENTRYPOINT ["python3", "main.py"]
