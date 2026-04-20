@@ -20,6 +20,34 @@ from waggle.plugin import Plugin
 from detectors import available_models, caption, detect
 
 # Map user-facing name "bioclip2" to the same backend as MSA detectors (OpenCLIP imageomics/bioclip).
+
+
+def _acquire_frame(
+    stream: str | None,
+    camera_id: str | None,
+) -> tuple[object, dict[str, Any]]:
+    """Grab one frame via RTSP/stream URL or named camera.
+
+    RTSP path matches temp-imagesampler / pywaggle: ``Camera(stream)`` and first
+    frame from ``camera.stream()``. Named path: ``Camera(id)`` and ``snapshot()``.
+    """
+    if stream and str(stream).strip():
+        s = str(stream).strip()
+        logging.info("Acquiring frame from stream: %s", s)
+        with Camera(s) as camera:
+            snapshot = None
+            for snap in camera.stream():
+                snapshot = snap
+                break
+        if snapshot is None:
+            raise RuntimeError("camera.stream() produced no frame")
+        return snapshot, {"source_kind": "stream", "stream": s}
+
+    cid = (camera_id or os.environ.get("WAGGLE_CAMERA") or "left").strip()
+    logging.info("Acquiring snapshot from camera id: %s", cid)
+    with Camera(cid) as camera:
+        snapshot = camera.snapshot()
+    return snapshot, {"source_kind": "camera", "camera": cid}
 _BACKEND_ALIASES = {"bioclip2": "bioclip"}
 
 
@@ -82,9 +110,21 @@ def main() -> None:
         help="detect: boxes/labels; caption: BioCLIP top taxa or Gemma4 description",
     )
     parser.add_argument(
+        "--stream",
+        default=os.environ.get("WAGGLE_STREAM") or os.environ.get("RTSP_URL") or "",
+        help="RTSP URL or stream id for Camera(stream); if set, first frame from "
+        "camera.stream() (see imagesampler). Overrides --camera for capture.",
+    )
+    parser.add_argument(
+        "--name",
+        default=os.environ.get("WAGGLE_STREAM_NAME") or "",
+        help="Logical name for this stream (upload meta['camera'] for node UI; "
+        "recommended with --stream).",
+    )
+    parser.add_argument(
         "--camera",
         default=os.environ.get("WAGGLE_CAMERA", "left"),
-        help="Camera id passed to pywaggle Camera() (e.g. left, right)",
+        help="Camera id when --stream is not set (e.g. left, lab_ptz)",
     )
     parser.add_argument(
         "--no-upload-snapshot",
@@ -167,9 +207,14 @@ def main() -> None:
             avail,
         )
 
+    stream = (args.stream or "").strip()
+    stream_name = (args.name or "").strip()
+
     with Plugin() as plugin:
-        with Camera(args.camera) as camera:
-            snapshot = camera.snapshot()
+        snapshot, source_info = _acquire_frame(
+            stream if stream else None,
+            args.camera if not stream else None,
+        )
 
         image = _numpy_rgb_to_pil(snapshot.data)
         ts = snapshot.timestamp
@@ -177,9 +222,15 @@ def main() -> None:
         payload: dict[str, Any] = {
             "backend": backend,
             "mode": args.mode,
-            "camera": args.camera,
             "image_size": list(image.size),
+            **source_info,
         }
+        if stream_name:
+            payload["stream_name"] = stream_name
+        if not stream:
+            payload["camera"] = source_info.get("camera", args.camera)
+        else:
+            payload["camera"] = stream_name or "rtsp"
 
         if args.mode == "detect":
             kwargs = _build_detect_kwargs(args, backend)
@@ -204,8 +255,18 @@ def main() -> None:
         if upload_snapshot:
             path = "snapshot.jpg"
             snapshot.save(path)
-            plugin.upload_file(path, timestamp=ts)
-            logging.info("Uploaded %s", path)
+            # imagesampler sets meta["camera"] so the node page can attribute uploads.
+            upload_meta: dict[str, str] = {}
+            label = stream_name or (payload.get("camera") if isinstance(payload.get("camera"), str) else "")
+            if label:
+                upload_meta["camera"] = label
+            elif stream:
+                upload_meta["camera"] = "rtsp"
+            if upload_meta:
+                plugin.upload_file(path, timestamp=ts, meta=upload_meta)
+            else:
+                plugin.upload_file(path, timestamp=ts)
+            logging.info("Uploaded %s meta=%s", path, upload_meta or None)
 
 
 if __name__ == "__main__":
