@@ -56,6 +56,11 @@ python3 main.py --backend bioclip2 --mode detect \
   --stream "rtsp://USER:PASS@HOST:554/stream" --name woodstock-cam-01 \
   --bioclip-rank Species --bioclip-target-taxon Trochilidae
 
+# From an HTTP snapshot endpoint (Reolink cmd=Snap) when RTSP is firewalled
+python3 main.py --backend bioclip2 --mode detect \
+  --snapshot-url "http://CAM_IP:PORT/cgi-bin/api.cgi?cmd=Snap&channel=0&user=USER&password=PASS" \
+  --name woodstock-cam-01 --bioclip-rank Species --bioclip-target-taxon Trochilidae
+
 # Caption mode (top-5 taxa at a rank)
 python3 main.py --backend bioclip2 --mode caption --camera left --bioclip-rank Order
 ```
@@ -66,6 +71,7 @@ python3 main.py --backend bioclip2 --mode caption --camera left --bioclip-rank O
 |-----|-----|---------|-------|
 | `--backend` | `VISION_BACKEND` | `bioclip2` | `bioclip2` \| `bioclip25` \| `bioclip` \| `yolo` |
 | `--mode` | `VISION_MODE` | `detect` | `detect` \| `caption` |
+| `--snapshot-url` | `SNAPSHOT_URL` | — | HTTP JPEG endpoint (e.g. Reolink `cmd=Snap`); **takes priority** over `--stream`/`--camera`. Use when RTSP is firewalled. Credentials are not published. |
 | `--stream` | `WAGGLE_STREAM` / `RTSP_URL` | — | RTSP URL / stream id (first frame) |
 | `--name` | `WAGGLE_STREAM_NAME` | — | Logical stream name for the node UI |
 | `--camera` | `WAGGLE_CAMERA` | `left` | Named camera when `--stream` is unset |
@@ -125,6 +131,12 @@ fill them in before submitting. See the
 feeder) and runs BioCLIP 2 every 10 minutes at `Species` rank with an optional
 `Trochilidae` (hummingbird family) taxon filter. View live results and uploaded
 snapshots on the node page in the [Sage portal](https://portal.sagecontinuum.org/).
+
+On Woodstock's node the Reolink camera only exposes the **HTTP snapshot API**
+(RTSP/554 is firewalled), so the demo captures via `--snapshot-url` (Reolink
+`cmd=Snap`) rather than RTSP. Single-frame capture is all this plugin needs.
+Keep the camera password out of the committed job file — inject it via the
+`SNAPSHOT_URL` env / a Sage secret on the pod.
 
 ## Summer-camp exercise (rebuild / tweak)
 

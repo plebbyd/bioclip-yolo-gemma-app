@@ -3,11 +3,17 @@
 #   sesctl create --file-path job-hummingbird-demo.yaml
 #   sesctl submit --job-id <ID>
 #
+# This node's Reolink camera exposes only the HTTP snapshot API (RTSP/554 is
+# firewalled), so we capture via --snapshot-url (Reolink cmd=Snap) instead of RTSP.
+#
 # TODO before submitting:
 #   - <NAMESPACE>      : your ECR namespace (image registry path)
 #   - <WOODSTOCK_VSN>  : the Sage VSN of the node hosting Woodstock-cam-01 (e.g. W0XX)
-#   - <RTSP_URL>       : RTSP URL of Woodstock-cam-01 pointed at the hummingbird feeder
-#                        (omit --stream/--name and use --camera if it is a named camera)
+#   - <SNAPSHOT_URL>   : the Reolink snapshot URL, of the form:
+#                          http://<CAM_IP>:<PORT>/cgi-bin/api.cgi?cmd=Snap&channel=0&user=<USER>&password=<PASS>
+#                        Keep real credentials OUT of this committed file — prefer
+#                        injecting them via the SNAPSHOT_URL env on the pod, or a
+#                        Sage secret, rather than hardcoding the password here.
 name: bioclip2-hummingbird-demo
 plugins:
   - name: bioclip2-hummingbird
@@ -18,8 +24,8 @@ plugins:
         - bioclip2
         - --mode
         - detect
-        - --stream
-        - "<RTSP_URL>"
+        - --snapshot-url
+        - "<SNAPSHOT_URL>"
         - --name
         - woodstock-cam-01
         - --bioclip-rank

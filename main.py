@@ -11,10 +11,14 @@ The plugin runs on GPU by default (set ALLOW_CPU=1 to allow slow CPU inference).
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import os
 import sys
+import time
+import urllib.parse
+import urllib.request
 from typing import Any
 
 import numpy as np
@@ -38,15 +42,66 @@ _BACKEND_ALIASES = {
 _VALID_BACKENDS = ("yolo", "bioclip", "bioclip2", "bioclip25")
 
 
+class _HTTPFrame:
+    """pywaggle-snapshot-like wrapper around a JPEG fetched over HTTP.
+
+    Exposes the same interface the plugin uses from a pywaggle snapshot:
+    ``.data`` (HxWx3 RGB uint8), ``.timestamp`` (ns), and ``.save(path)``.
+    """
+
+    def __init__(self, data: np.ndarray, timestamp: int, raw_bytes: bytes | None = None):
+        self.data = data
+        self.timestamp = timestamp
+        self._raw = raw_bytes
+
+    def save(self, path: str) -> None:
+        if self._raw is not None and path.lower().endswith((".jpg", ".jpeg")):
+            with open(path, "wb") as f:
+                f.write(self._raw)
+        else:
+            Image.fromarray(self.data).save(path)
+
+
+def _fresh_snapshot_url(url: str) -> str:
+    """Add/refresh the Reolink ``rs`` cache-buster so each call returns a new frame."""
+    parts = urllib.parse.urlsplit(url)
+    q = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    q = [(k, v) for (k, v) in q if k != "rs"]
+    q.append(("rs", str(time.time_ns())))
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(q)))
+
+
+def _acquire_frame_http(url: str, timeout: float = 15.0) -> tuple[_HTTPFrame, dict[str, Any]]:
+    """Fetch one JPEG via an HTTP snapshot endpoint (e.g. Reolink ``cmd=Snap``).
+
+    Credentials in the URL are NOT published — only ``source_kind`` is returned.
+    """
+    req_url = _fresh_snapshot_url(url)
+    logging.info("Acquiring snapshot via HTTP (host=%s)", urllib.parse.urlsplit(req_url).hostname)
+    with urllib.request.urlopen(req_url, timeout=timeout) as resp:  # noqa: S310
+        raw = resp.read()
+    if not raw:
+        raise RuntimeError("HTTP snapshot endpoint returned no data")
+    image = Image.open(io.BytesIO(raw)).convert("RGB")
+    data = np.asarray(image, dtype=np.uint8)
+    return _HTTPFrame(data, time.time_ns(), raw_bytes=raw), {"source_kind": "http"}
+
+
 def _acquire_frame(
     stream: str | None,
     camera_id: str | None,
+    snapshot_url: str | None = None,
 ) -> tuple[object, dict[str, Any]]:
-    """Grab one frame via RTSP/stream URL or named camera.
+    """Grab one frame via HTTP snapshot URL, RTSP/stream URL, or named camera.
 
-    RTSP path matches temp-imagesampler / pywaggle: ``Camera(stream)`` and first
-    frame from ``camera.stream()``. Named path: ``Camera(id)`` and ``snapshot()``.
+    HTTP path: fetch a JPEG from an HTTP snapshot endpoint (Reolink ``cmd=Snap``),
+    useful when RTSP is firewalled. RTSP path matches temp-imagesampler / pywaggle:
+    ``Camera(stream)`` and first frame from ``camera.stream()``. Named path:
+    ``Camera(id)`` and ``snapshot()``.
     """
+    if snapshot_url and str(snapshot_url).strip():
+        return _acquire_frame_http(str(snapshot_url).strip())
+
     if stream and str(stream).strip():
         s = str(stream).strip()
         logging.info("Acquiring frame from stream: %s", s)
@@ -116,6 +171,13 @@ def main() -> None:
         choices=("detect", "caption"),
         default=os.environ.get("VISION_MODE", "detect"),
         help="detect: boxes/labels; caption: BioCLIP/BioCLIP 2 top taxa",
+    )
+    parser.add_argument(
+        "--snapshot-url",
+        default=os.environ.get("SNAPSHOT_URL", ""),
+        help="HTTP JPEG snapshot endpoint (e.g. Reolink cmd=Snap). If set, takes "
+        "priority over --stream/--camera. Useful when RTSP is firewalled. "
+        "Credentials in the URL are not published.",
     )
     parser.add_argument(
         "--stream",
@@ -197,11 +259,13 @@ def main() -> None:
 
     stream = (args.stream or "").strip()
     stream_name = (args.name or "").strip()
+    snapshot_url = (args.snapshot_url or "").strip()
 
     with Plugin() as plugin:
         snapshot, source_info = _acquire_frame(
-            stream if stream else None,
-            args.camera if not stream else None,
+            stream if (stream and not snapshot_url) else None,
+            args.camera if not (stream or snapshot_url) else None,
+            snapshot_url=snapshot_url or None,
         )
 
         image = _numpy_rgb_to_pil(snapshot.data)
@@ -215,7 +279,9 @@ def main() -> None:
         }
         if stream_name:
             payload["stream_name"] = stream_name
-        if not stream:
+        if snapshot_url:
+            payload["camera"] = stream_name or "http"
+        elif not stream:
             payload["camera"] = source_info.get("camera", args.camera)
         else:
             payload["camera"] = stream_name or "rtsp"
