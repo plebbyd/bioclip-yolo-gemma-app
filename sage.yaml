@@ -12,6 +12,7 @@ source:
   # (Jetson), build Dockerfile.jetson-thor separately and register that image.
   architectures:
     - "linux/amd64"
+    - "linux/arm64"
   directory: "."
   dockerfile: "Dockerfile"
   # TODO: replace with the public GitHub repo URL once published.
