@@ -7,7 +7,6 @@ collaborators: "Matthew Thompson (OSU / Imageomics)"
 # TODO: replace with the public GitHub repo URL once published.
 homepage: "https://github.com/waggle-sensor/bioclip2-vision-app"
 license: "MIT"
-science_description: "ecr-meta/ecr-science-description.md"
 source:
   # amd64 + NVIDIA runtime via the default Dockerfile (CUDA torch). For arm64 GPU
   # (Jetson), build Dockerfile.jetson-thor separately and register that image.
