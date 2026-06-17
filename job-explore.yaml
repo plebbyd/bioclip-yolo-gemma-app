@@ -1,0 +1,35 @@
+# BioCLIP 2 explore/testing run across a set of Sage nodes.
+# Submit with sesctl:
+#   sesctl create --file-path job-explore.yaml
+#   sesctl submit --job-id <ID>
+#
+# TODO before submitting:
+#   - <NAMESPACE>      : your ECR namespace (image registry path)
+#   - <NODE_VSN_1..N>  : VSNs of the nodes to explore/test on (lowercase job name,
+#                        only letters/numbers/'-'; see Sage dev quick reference)
+#   - --camera / --stream: set per your nodes' camera config (default camera id "left")
+name: bioclip2-explore
+plugins:
+  - name: bioclip2-explore
+    pluginSpec:
+      image: registry.sagecontinuum.org/<NAMESPACE>/bioclip2-vision:0.5.0
+      args:
+        - --backend
+        - bioclip2
+        - --mode
+        - detect
+        - --camera
+        - left
+        - --bioclip-rank
+        - Class
+        - --bioclip-min-confidence
+        - "0.1"
+nodeTags: []
+nodes:
+  <NODE_VSN_1>: true
+  <NODE_VSN_2>: true
+  <NODE_VSN_3>: true
+scienceRules:
+  - 'schedule(bioclip2-explore): cronjob("bioclip2-explore", "*/30 * * * *")'
+successCriteria:
+  - WallClock('7d')

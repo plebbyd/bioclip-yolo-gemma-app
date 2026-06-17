@@ -1,10 +1,47 @@
-name: "sage-vision-detect"
-version: "0.3.0"
-description: "Camera snapshot, YOLO/BioCLIP/Gemma4 vision, publish to Sage."
-authors: "MSA project"
-homepage: "https://github.com/waggle-sensor/sage-vision-detect-app"
-keywords: "vision,yolo,bioclip,gemma,ollama,camera"
+name: "bioclip2-vision"
+version: "0.5.0"
+description: "Capture a camera frame and classify/localize organisms with BioCLIP 2 (default), BioCLIP 2.5 Huge, original BioCLIP, or YOLO; publish results to Sage. GPU required."
+keywords: "vision,bioclip,bioclip2,bioclip2.5,yolo,species,taxonomy,camera,wildlife,hummingbird,gpu"
+authors: "MSA project; Imageomics (BioCLIP 2)"
+collaborators: "Matthew Thompson (OSU / Imageomics)"
+# TODO: replace with the public GitHub repo URL once published.
+homepage: "https://github.com/waggle-sensor/bioclip2-vision-app"
+license: "MIT"
+science_description: "ecr-meta/ecr-science-description.md"
 source:
+  # amd64 + NVIDIA runtime via the default Dockerfile (CUDA torch). For arm64 GPU
+  # (Jetson), build Dockerfile.jetson-thor separately and register that image.
   architectures:
     - "linux/amd64"
-    - "linux/arm64"
+  directory: "."
+  dockerfile: "Dockerfile"
+  # TODO: replace with the public GitHub repo URL once published.
+  url: "https://github.com/waggle-sensor/bioclip2-vision-app"
+inputs:
+  - id: backend
+    type: string
+    description: "Model backend: bioclip2 (default), bioclip25 (BioCLIP 2.5 Huge, ViT-H/14, heaviest), bioclip, or yolo."
+  - id: mode
+    type: string
+    description: "detect (boxes/labels) or caption (top taxa)."
+  - id: stream
+    type: string
+    description: "RTSP URL or stream id. If set, captures the first frame from the stream."
+  - id: name
+    type: string
+    description: "Logical stream name shown in the node UI (e.g. woodstock-cam-01)."
+  - id: camera
+    type: string
+    description: "Named camera id when --stream is not set (e.g. left, top)."
+  - id: bioclip-rank
+    type: string
+    description: "BioCLIP/BioCLIP 2 taxonomic rank: Kingdom..Species (default Class)."
+  - id: bioclip-target-taxon
+    type: string
+    description: "Optional taxon filter (whitespace/comma tokens), e.g. 'Aves' or 'Trochilidae'."
+  - id: bioclip-min-confidence
+    type: float
+    description: "Minimum confidence to report a detection (default 0.1)."
+  - id: targets
+    type: string
+    description: "YOLO only: comma-separated class names, or * for all."

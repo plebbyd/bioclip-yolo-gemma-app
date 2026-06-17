@@ -1,6 +1,11 @@
 """
-Sage / Waggle plugin: capture one camera frame, run YOLO / BioCLIP / Gemma4
-(via detectors module), publish JSON results and optionally upload the snapshot.
+Sage / Waggle plugin: capture one camera frame, run BioCLIP 2.5 / BioCLIP 2 /
+BioCLIP / YOLO (via the detectors module), publish JSON results and optionally
+upload the snapshot.
+
+Default backend is BioCLIP 2 (``imageomics/bioclip-2``), the demo/summer-camp model;
+``bioclip25`` selects the newer, larger BioCLIP 2.5 Huge (``imageomics/bioclip-2.5-vith14``).
+The plugin runs on GPU by default (set ALLOW_CPU=1 to allow slow CPU inference).
 """
 
 from __future__ import annotations
@@ -19,7 +24,18 @@ from waggle.plugin import Plugin
 
 from detectors import available_models, caption, detect
 
-# Map user-facing name "bioclip2" to the same backend as MSA detectors (OpenCLIP imageomics/bioclip).
+# Accept common spellings of the BioCLIP backend names.
+_BACKEND_ALIASES = {
+    "bioclip-2": "bioclip2",
+    "bioclip_2": "bioclip2",
+    "bioclipv2": "bioclip2",
+    "bioclip2.5": "bioclip25",
+    "bioclip-2.5": "bioclip25",
+    "bioclip_2.5": "bioclip25",
+    "bioclip-2.5-vith14": "bioclip25",
+    "bioclip2.5huge": "bioclip25",
+}
+_VALID_BACKENDS = ("yolo", "bioclip", "bioclip2", "bioclip25")
 
 
 def _acquire_frame(
@@ -48,7 +64,6 @@ def _acquire_frame(
     with Camera(cid) as camera:
         snapshot = camera.snapshot()
     return snapshot, {"source_kind": "camera", "camera": cid}
-_BACKEND_ALIASES = {"bioclip2": "bioclip"}
 
 
 def _normalize_backend(name: str) -> str:
@@ -68,24 +83,17 @@ def _build_detect_kwargs(args: argparse.Namespace, backend: str) -> dict[str, An
     if backend == "yolo":
         if args.targets:
             out["targets"] = args.targets
-    elif backend == "bioclip":
+    elif backend in ("bioclip", "bioclip2"):
         out["rank"] = args.bioclip_rank
         out["target_taxon"] = args.bioclip_target_taxon
         out["min_confidence"] = args.bioclip_min_confidence
-    elif backend == "gemma4":
-        out["target"] = args.gemma_targets
-        if args.gemma_max_soft_tokens is not None:
-            out["max_soft_tokens"] = args.gemma_max_soft_tokens
     return out
 
 
 def _build_caption_kwargs(args: argparse.Namespace, backend: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    if backend == "gemma4":
-        if args.gemma_caption_prompt:
-            out["prompt"] = args.gemma_caption_prompt
-        if args.gemma_max_soft_tokens is not None:
-            out["max_soft_tokens"] = args.gemma_max_soft_tokens
+    if backend in ("bioclip", "bioclip2"):
+        out["rank"] = args.bioclip_rank
     return out
 
 
@@ -100,14 +108,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--backend",
-        default=os.environ.get("VISION_BACKEND", "yolo"),
-        help="yolo | bioclip | bioclip2 | gemma4 (bioclip2 aliases bioclip)",
+        default=os.environ.get("VISION_BACKEND", "bioclip2"),
+        help="bioclip2 (default) | bioclip25 (newest, ViT-H/14, heaviest) | bioclip | yolo",
     )
     parser.add_argument(
         "--mode",
         choices=("detect", "caption"),
         default=os.environ.get("VISION_MODE", "detect"),
-        help="detect: boxes/labels; caption: BioCLIP top taxa or Gemma4 description",
+        help="detect: boxes/labels; caption: BioCLIP/BioCLIP 2 top taxa",
     )
     parser.add_argument(
         "--stream",
@@ -152,27 +160,7 @@ def main() -> None:
         default=float(os.environ.get("BIOCLIP_MIN_CONFIDENCE", "0.1")),
         help="BioCLIP minimum confidence",
     )
-    parser.add_argument(
-        "--gemma-targets",
-        default=os.environ.get("GEMMA4_TARGETS", ""),
-        help="Gemma4 detection: comma categories or empty/* for all",
-    )
-    parser.add_argument(
-        "--gemma-max-soft-tokens",
-        type=int,
-        default=None,
-        help="Gemma4 visual soft-token budget hint (70,140,280,...)",
-    )
-    parser.add_argument(
-        "--gemma-caption-prompt",
-        default=os.environ.get("GEMMA_CAPTION_PROMPT", ""),
-        help="Gemma4 caption mode: custom prompt (optional)",
-    )
     args = parser.parse_args()
-    if args.gemma_max_soft_tokens is None:
-        raw_ms = os.environ.get("GEMMA4_MAX_SOFT_TOKENS", "").strip()
-        if raw_ms.isdigit():
-            args.gemma_max_soft_tokens = int(raw_ms)
 
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
@@ -181,12 +169,12 @@ def main() -> None:
     )
 
     backend = _normalize_backend(args.backend)
-    if backend not in ("yolo", "bioclip", "gemma4"):
-        logging.error("Unknown backend %r", args.backend)
+    if backend not in _VALID_BACKENDS:
+        logging.error("Unknown backend %r (choose from %s)", args.backend, ", ".join(_VALID_BACKENDS))
         sys.exit(2)
 
     if args.mode == "caption" and backend == "yolo":
-        logging.error("Caption mode requires bioclip or gemma4, not yolo")
+        logging.error("Caption mode requires bioclip or bioclip2, not yolo")
         sys.exit(2)
 
     upload_snapshot = not args.no_upload_snapshot

@@ -6,11 +6,13 @@ ffmpeg-python>=0.2.0
 numpy>=1.24
 Pillow>=10.0
 opencv-python-headless>=4.8
-requests>=2.31
 huggingface_hub>=0.20
 
-# YOLO + BioCLIP (torch pins: use matching wheels for your platform / CUDA)
-torch
-torchvision
+# Models: YOLO + BioCLIP / BioCLIP 2 (OpenCLIP)
+#   torch + torchvision are pulled in transitively by ultralytics / open_clip_torch
+#   on amd64. On Jetson (Dockerfile.jetson-thor) the CUDA build of torch/torchvision
+#   ships in the base image — do NOT pin them here or pip may clobber the GPU build.
+#   For CUDA on generic amd64 nodes, preinstall matching torch+torchvision wheels
+#   (same CUDA line) BEFORE running pip install -r requirements.txt.
 ultralytics>=8.0
 open_clip_torch>=2.24

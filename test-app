@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # Local dry-run: log published metrics to ./test-run (see Sage pywaggle tutorial).
+# Default: BioCLIP 2 species detection on the named camera. Override the backend,
+# stream, rank, etc. by passing extra args, e.g.:
+#   ./test-app --backend bioclip2 --bioclip-rank Species --bioclip-target-taxon Trochilidae
+#   ./test-app --stream "rtsp://USER:PASS@HOST:554/stream" --name woodstock-cam-01
 set -euo pipefail
 cd "$(dirname "$0")"
 export PYWAGGLE_LOG_DIR="${PYWAGGLE_LOG_DIR:-test-run}"
-# Example: YOLO detection (requires ultralytics + torch)
-exec python3 main.py --debug --backend yolo --mode detect --camera "${WAGGLE_CAMERA:-left}" "$@"
+# The plugin requires a GPU by default; allow CPU here for local dry-runs.
+export ALLOW_CPU="${ALLOW_CPU:-1}"
+exec python3 main.py --debug \
+  --backend "${VISION_BACKEND:-bioclip2}" \
+  --mode "${VISION_MODE:-detect}" \
+  --camera "${WAGGLE_CAMERA:-left}" "$@"

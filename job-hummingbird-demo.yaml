@@ -1,0 +1,37 @@
+# BioCLIP 2 hummingbird-feeder demo on Woodstock-cam-01.
+# Submit with sesctl:
+#   sesctl create --file-path job-hummingbird-demo.yaml
+#   sesctl submit --job-id <ID>
+#
+# TODO before submitting:
+#   - <NAMESPACE>      : your ECR namespace (image registry path)
+#   - <WOODSTOCK_VSN>  : the Sage VSN of the node hosting Woodstock-cam-01 (e.g. W0XX)
+#   - <RTSP_URL>       : RTSP URL of Woodstock-cam-01 pointed at the hummingbird feeder
+#                        (omit --stream/--name and use --camera if it is a named camera)
+name: bioclip2-hummingbird-demo
+plugins:
+  - name: bioclip2-hummingbird
+    pluginSpec:
+      image: registry.sagecontinuum.org/<NAMESPACE>/bioclip2-vision:0.5.0
+      args:
+        - --backend
+        - bioclip2
+        - --mode
+        - detect
+        - --stream
+        - "<RTSP_URL>"
+        - --name
+        - woodstock-cam-01
+        - --bioclip-rank
+        - Species
+        - --bioclip-target-taxon
+        - Trochilidae
+        - --bioclip-min-confidence
+        - "0.1"
+nodeTags: []
+nodes:
+  <WOODSTOCK_VSN>: true
+scienceRules:
+  - 'schedule(bioclip2-hummingbird): cronjob("bioclip2-hummingbird", "*/10 * * * *")'
+successCriteria:
+  - WallClock('1day')
