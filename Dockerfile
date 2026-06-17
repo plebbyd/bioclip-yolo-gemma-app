@@ -23,6 +23,17 @@ COPY requirements.txt .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
+# Bake BioCLIP 2 weights + TreeOfLife-200M species embeddings into the image so the
+# container needs no network at runtime (scheduled WES jobs frequently lack HF egress).
+# HF_HUB_DISABLE_XET avoids the Xet CDN, which is often unreachable from build/edge nets.
+ENV HF_HOME=/opt/hf-cache \
+    HF_HUB_DISABLE_XET=1
+RUN python3 -c "import open_clip; open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip-2')" \
+ && python3 -c "from huggingface_hub import hf_hub_download as d; import shutil, os; [shutil.move(d('imageomics/TreeOfLife-200M', f, repo_type='dataset', local_dir='/app/_emb'), '/app/'+os.path.basename(f)) for f in ('embeddings/txt_emb_bioclip-2.npy', 'embeddings/txt_emb_bioclip-2.json')]" \
+ && rm -rf /app/_emb
+# Models are now cached in the image; do not attempt any HF network calls at runtime.
+ENV HF_HUB_OFFLINE=1
+
 COPY . .
 
 ENTRYPOINT ["python3", "main.py"]

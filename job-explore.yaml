@@ -12,7 +12,7 @@ name: bioclip2-explore
 plugins:
   - name: bioclip2-explore
     pluginSpec:
-      image: registry.sagecontinuum.org/<NAMESPACE>/bioclip2-vision:0.5.0
+      image: registry.sagecontinuum.org/<NAMESPACE>/bioclip2-vision:0.14.0
       args:
         - --backend
         - bioclip2
