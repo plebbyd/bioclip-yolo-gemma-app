@@ -7,8 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export PYWAGGLE_LOG_DIR="${PYWAGGLE_LOG_DIR:-test-run}"
-# The plugin requires a GPU by default; allow CPU here for local dry-runs.
-export ALLOW_CPU="${ALLOW_CPU:-1}"
+# Uses the GPU if present, otherwise CPU (fine for a single frame).
 exec python3 main.py --debug \
   --backend "${VISION_BACKEND:-bioclip2}" \
   --mode "${VISION_MODE:-detect}" \

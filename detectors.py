@@ -15,7 +15,7 @@ Supported backends:
 
 BioCLIP backends need: open_clip_torch, torch, torchvision, opencv-python, numpy,
 huggingface_hub. The taxon filter matches any ranked candidate, not only top-1.
-The plugin runs on GPU by default (set ALLOW_CPU=1 to permit slow CPU inference).
+Inference uses the GPU when available, otherwise CPU (set REQUIRE_GPU=1 to enforce GPU).
 All detectors are singletons: loaded once on first use, then cached.
 """
 
@@ -155,29 +155,23 @@ if _HAS_TORCH and np is not None and cv2 is not None:
     except Exception:
         _HAS_BIOCLIP = False
 
-def _gpu_required() -> bool:
-    """True unless ``ALLOW_CPU`` is set (the plugin defaults to GPU-only)."""
-    return os.environ.get("ALLOW_CPU", "").strip().lower() not in ("1", "true", "yes", "on")
-
-
 def _select_device() -> str:
-    """Return the torch device, requiring a CUDA GPU by default.
+    """Return the torch device: CUDA GPU if available, otherwise CPU.
 
-    This plugin is designed to always run on GPU. If no CUDA device is visible we
-    raise a clear error instead of silently falling back to (very slow) CPU
-    inference. Set ``ALLOW_CPU=1`` to permit CPU, e.g. for local dry-runs / VW.
+    The plugin captures one frame per run, so CPU inference is fine for periodic
+    schedules; it transparently uses the GPU when one is visible (e.g. a CUDA
+    container on a Jetson/GPU node). Set ``REQUIRE_GPU=1`` to fail fast instead of
+    falling back to CPU.
     """
     if _HAS_TORCH and torch.cuda.is_available():
         return "cuda"
-    if not _gpu_required():
-        logger.warning("CUDA not available — running on CPU (ALLOW_CPU set). This will be slow.")
-        return "cpu"
-    raise RuntimeError(
-        "No CUDA GPU available. This plugin is configured to require a GPU. "
-        "Schedule it on a GPU-enabled Sage node (e.g. Jetson), make sure the "
-        "container has CUDA torch and the NVIDIA runtime, or set ALLOW_CPU=1 for "
-        "a slow CPU dry-run."
-    )
+    if os.environ.get("REQUIRE_GPU", "").strip().lower() in ("1", "true", "yes", "on"):
+        raise RuntimeError(
+            "REQUIRE_GPU is set but no CUDA GPU is available. Run on a GPU node with "
+            "a CUDA-enabled torch build (e.g. the Jetson image), or unset REQUIRE_GPU."
+        )
+    logger.info("No CUDA GPU detected — running on CPU (set REQUIRE_GPU=1 to enforce GPU).")
+    return "cpu"
 
 
 def available_models() -> dict:

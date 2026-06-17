@@ -5,7 +5,7 @@ upload the snapshot.
 
 Default backend is BioCLIP 2 (``imageomics/bioclip-2``), the demo/summer-camp model;
 ``bioclip25`` selects the newer, larger BioCLIP 2.5 Huge (``imageomics/bioclip-2.5-vith14``).
-The plugin runs on GPU by default (set ALLOW_CPU=1 to allow slow CPU inference).
+Inference uses the GPU when available, else CPU (set REQUIRE_GPU=1 to enforce GPU).
 """
 
 from __future__ import annotations

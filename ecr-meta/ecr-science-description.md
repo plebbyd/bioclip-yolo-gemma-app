@@ -47,10 +47,12 @@ embeddings; they are not interchangeable.
 
 ## Hardware
 
-The plugin requires a **CUDA GPU** and fails fast if none is visible (set `ALLOW_CPU=1`
-for a slow CPU dry-run). The default amd64 image installs CUDA torch and uses the host
-GPU via the NVIDIA container runtime; Jetson uses `Dockerfile.jetson-thor`. BioCLIP 2.5
-Huge (ViT-H/14) needs noticeably more GPU memory/compute than BioCLIP 2.
+The plugin runs on **CPU or GPU**: it uses a CUDA GPU when a CUDA-enabled torch is
+present, otherwise CPU. Because it captures one frame per run, CPU is fine for periodic
+schedules. The default image is multi-arch (amd64 + arm64) with CPU torch and builds in
+ECR directly; for GPU-accelerated in-container inference on Jetson Thor, build
+`Dockerfile.jetson-thor` (CUDA torch from a Jetson base) on the node. Set `REQUIRE_GPU=1`
+to fail fast if no GPU is available. BioCLIP 2.5 Huge (ViT-H/14) is the heaviest model.
 
 ## Inference output
 

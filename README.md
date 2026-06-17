@@ -15,10 +15,11 @@ full Linnean hierarchy (Kingdom → Species). Backends:
 | `bioclip`   | `hf-hub:imageomics/bioclip` (ViT-B/16)         | Original BioCLIP, for comparison |
 | `yolo`      | Ultralytics YOLO11                              | Generic object detection (people, vehicles, common animals) |
 
-> **GPU required.** The plugin runs on CUDA by default and fails fast if no GPU is
-> visible. Set `ALLOW_CPU=1` to permit (slow) CPU inference for local dry-runs.
-> BioCLIP 2.5 Huge (ViT-H/14) is substantially larger than BioCLIP 2 — schedule it
-> only on capable GPU nodes.
+> **CPU or GPU.** Inference uses the GPU when a CUDA-enabled torch is present,
+> otherwise it runs on CPU — which is fine here since the plugin grabs one frame
+> per run. The default image is multi-arch (amd64 + arm64) CPU torch; set
+> `REQUIRE_GPU=1` to fail fast if no GPU is found. BioCLIP 2.5 Huge (ViT-H/14) is
+> the largest/slowest; on CPU expect more seconds per frame than BioCLIP 2.
 
 > Each BioCLIP version uses its **own** species text embeddings from the
 > [`imageomics/TreeOfLife-200M`](https://huggingface.co/datasets/imageomics/TreeOfLife-200M)
@@ -79,29 +80,32 @@ python3 main.py --backend bioclip2 --mode caption --camera left --bioclip-rank O
 | `--bioclip-target-taxon` | `BIOCLIP_TARGET_TAXON` | — | Filter, e.g. `Aves` or `Trochilidae` |
 | `--bioclip-min-confidence` | `BIOCLIP_MIN_CONFIDENCE` | `0.1` | |
 | `--targets` | `YOLO_TARGETS` | `*` | YOLO class filter |
-| | `ALLOW_CPU` | unset | Set to `1` to allow CPU inference (default: GPU required) |
+| | `REQUIRE_GPU` | unset | Set to `1` to fail fast if no CUDA GPU is available |
 | | `BIOCLIP2_EMB_DIR` | — | Dir holding the species `txt_emb_*.{npy,json}` |
 | | `HF_HOME` | — | Hugging Face cache dir |
 
 ## Build the container
 
-The plugin requires a GPU. The default image installs CUDA `torch`/`torchvision`.
+The default `Dockerfile` is **multi-arch (amd64 + arm64) with CPU torch** and builds
+directly in ECR — no special base needed.
 
 ```bash
-# amd64 + NVIDIA runtime (CUDA 12.4 wheels — default):
+# Multi-arch CPU image (also what ECR builds):
 docker build -t registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.5.0 .
-
-# CPU-only image for local dry-runs / Virtual Waggle (pair with ALLOW_CPU=1):
-docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu \
-  -t registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.5.0-cpu .
-
-# Jetson Thor (arm64 CUDA) — build the Thor base first, then:
-docker build -f Dockerfile.jetson-thor \
-  -t registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.5.0-thor .
 ```
 
-The CUDA torch wheels are x86_64-only; for arm64 GPU (Jetson) use the Thor image,
-whose base already provides CUDA torch (intentionally not pinned in `requirements.txt`).
+### Optional: GPU-accelerated image for Jetson Thor
+
+In-container GPU inference needs a CUDA build of torch, which on Jetson comes from a
+Jetson/Thor base image. `Dockerfile.jetson-thor` builds `FROM ${THOR_BASE}` — set it
+to a base that ships CUDA torch + torchvision (e.g. the base your other GPU plugins
+use). ECR's cloud builder can't pull a node-local base, so build on the node and push:
+
+```bash
+docker build -f Dockerfile.jetson-thor --build-arg THOR_BASE=<thor-pytorch-base> \
+  -t registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.5.0-thor .
+docker push registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.5.0-thor
+```
 
 ## Deploy to the Edge Code Repository (ECR) & schedule
 

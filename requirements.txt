@@ -8,11 +8,11 @@ Pillow>=10.0
 opencv-python-headless>=4.8
 huggingface_hub>=0.20
 
-# Models: YOLO + BioCLIP / BioCLIP 2 (OpenCLIP)
-#   torch + torchvision are pulled in transitively by ultralytics / open_clip_torch
-#   on amd64. On Jetson (Dockerfile.jetson-thor) the CUDA build of torch/torchvision
-#   ships in the base image — do NOT pin them here or pip may clobber the GPU build.
-#   For CUDA on generic amd64 nodes, preinstall matching torch+torchvision wheels
-#   (same CUDA line) BEFORE running pip install -r requirements.txt.
+# Models: YOLO + BioCLIP / BioCLIP 2 / BioCLIP 2.5 (OpenCLIP).
+#   torch + torchvision install CPU wheels from PyPI for both amd64 and arm64, so
+#   the image builds multi-arch in ECR. Inference uses the GPU automatically if a
+#   CUDA-enabled torch is present instead (e.g. the Jetson image / Dockerfile.jetson-thor).
+torch
+torchvision
 ultralytics>=8.0
 open_clip_torch>=2.24
