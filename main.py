@@ -21,6 +21,12 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+# Hugging Face's Xet transfer protocol (cas-server.xethub.hf.co / *.cdn.hf.co) is
+# often unreachable from edge nodes and silently stalls large downloads at 0 B/s.
+# Default to the plain HTTPS CDN (huggingface.co) which works there; override by
+# exporting HF_HUB_DISABLE_XET=0 on networks where Xet is reachable.
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
 import numpy as np
 from PIL import Image
 from waggle.data.vision import Camera
@@ -63,12 +69,16 @@ class _HTTPFrame:
 
 
 def _fresh_snapshot_url(url: str) -> str:
-    """Add/refresh the Reolink ``rs`` cache-buster so each call returns a new frame."""
+    """Add/refresh the Reolink ``rs`` cache-buster so each call returns a new frame.
+
+    The original query is preserved verbatim (NOT re-encoded) so values like a
+    password containing ``!`` are sent exactly as given — many camera CGIs do not
+    URL-decode query params, so re-encoding ``!`` to ``%21`` would break auth.
+    """
     parts = urllib.parse.urlsplit(url)
-    q = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
-    q = [(k, v) for (k, v) in q if k != "rs"]
-    q.append(("rs", str(time.time_ns())))
-    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(q)))
+    items = [kv for kv in parts.query.split("&") if kv and not kv.startswith("rs=")]
+    items.append(f"rs={time.time_ns()}")
+    return urllib.parse.urlunsplit(parts._replace(query="&".join(items)))
 
 
 def _acquire_frame_http(url: str, timeout: float = 15.0) -> tuple[_HTTPFrame, dict[str, Any]]:
@@ -79,10 +89,18 @@ def _acquire_frame_http(url: str, timeout: float = 15.0) -> tuple[_HTTPFrame, di
     req_url = _fresh_snapshot_url(url)
     logging.info("Acquiring snapshot via HTTP (host=%s)", urllib.parse.urlsplit(req_url).hostname)
     with urllib.request.urlopen(req_url, timeout=timeout) as resp:  # noqa: S310
+        ctype = resp.headers.get("Content-Type", "")
         raw = resp.read()
     if not raw:
         raise RuntimeError("HTTP snapshot endpoint returned no data")
-    image = Image.open(io.BytesIO(raw)).convert("RGB")
+    try:
+        image = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        raise RuntimeError(
+            f"HTTP snapshot did not return a decodable image (content-type={ctype!r}, "
+            f"{len(raw)} bytes; starts with {raw[:120]!r}). Check the URL/credentials "
+            "and do not URL-encode the password."
+        ) from exc
     data = np.asarray(image, dtype=np.uint8)
     return _HTTPFrame(data, time.time_ns(), raw_bytes=raw), {"source_kind": "http"}
 
@@ -230,6 +248,12 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+    # When running outside WES there is no rabbitmq broker, so pywaggle's publisher
+    # thread spams connection tracebacks. Silence that logger; on a real node the
+    # broker resolves and these never fire.
+    logging.getLogger("waggle.plugin.rabbitmq").setLevel(logging.CRITICAL)
+    logging.getLogger("pika").setLevel(logging.CRITICAL)
+
     backend = _normalize_backend(args.backend)
     if backend not in _VALID_BACKENDS:
         logging.error("Unknown backend %r (choose from %s)", args.backend, ", ".join(_VALID_BACKENDS))
@@ -305,6 +329,20 @@ def main() -> None:
         plugin.publish("vision.result_json", out_json, timestamp=ts)
         plugin.publish("vision.backend", backend, timestamp=ts)
         plugin.publish("vision.mode", args.mode, timestamp=ts)
+
+        if args.mode == "detect":
+            dets = result.get("detections") or []
+            if dets:
+                summary = ", ".join(
+                    f"{d.get('label', '?')} ({float(d.get('confidence', 0.0)):.1%})"
+                    for d in dets[:5]
+                )
+            else:
+                summary = "no detections"
+            logging.info("RESULT [%s] %s — %s", backend, args.mode, summary)
+        else:
+            logging.info("RESULT [%s] %s — %s", backend, args.mode,
+                         result.get("caption") or "(empty)")
 
         if upload_snapshot:
             path = "snapshot.jpg"

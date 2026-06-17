@@ -7,18 +7,17 @@
 # firewalled), so we capture via --snapshot-url (Reolink cmd=Snap) instead of RTSP.
 #
 # TODO before submitting:
-#   - <NAMESPACE>      : your ECR namespace (image registry path)
-#   - <WOODSTOCK_VSN>  : the Sage VSN of the node hosting Woodstock-cam-01 (e.g. W0XX)
 #   - <SNAPSHOT_URL>   : the Reolink snapshot URL, of the form:
 #                          http://<CAM_IP>:<PORT>/cgi-bin/api.cgi?cmd=Snap&channel=0&user=<USER>&password=<PASS>
 #                        Keep real credentials OUT of this committed file — prefer
 #                        injecting them via the SNAPSHOT_URL env on the pod, or a
 #                        Sage secret, rather than hardcoding the password here.
+#   - Confirm the node VSN (H00F below) matches the Woodstock node in the portal.
 name: bioclip2-hummingbird-demo
 plugins:
   - name: bioclip2-hummingbird
     pluginSpec:
-      image: registry.sagecontinuum.org/<NAMESPACE>/bioclip2-vision:0.5.0
+      image: registry.sagecontinuum.org/plebbyd/bioclip2-vision:0.11.0
       args:
         - --backend
         - bioclip2
@@ -36,7 +35,7 @@ plugins:
         - "0.1"
 nodeTags: []
 nodes:
-  <WOODSTOCK_VSN>: true
+  H00F: true
 scienceRules:
   - 'schedule(bioclip2-hummingbird): cronjob("bioclip2-hummingbird", "*/10 * * * *")'
 successCriteria:
