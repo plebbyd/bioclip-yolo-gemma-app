@@ -1,5 +1,5 @@
 name: "bioclip2-vision"
-version: "0.9.0"
+version: "0.10.0"
 description: "Capture a camera frame and classify/localize organisms with BioCLIP 2 (default), BioCLIP 2.5 Huge, original BioCLIP, or YOLO; publish results to Sage. GPU required."
 keywords: "vision,bioclip,bioclip2,bioclip2.5,yolo,species,taxonomy,camera,wildlife,hummingbird,gpu"
 authors: "MSA project; Imageomics (BioCLIP 2)"
@@ -8,13 +8,14 @@ collaborators: "Matthew Thompson (OSU / Imageomics)"
 homepage: "https://github.com/waggle-sensor/bioclip2-vision-app"
 license: "MIT"
 source:
-  # amd64 + NVIDIA runtime via the default Dockerfile (CUDA torch). For arm64 GPU
-  # (Jetson), build Dockerfile.jetson-thor separately and register that image.
+  # Jetson Thor (arm64 + CUDA) target: build from the Jetson base in
+  # Dockerfile.jetson-thor (inherits the base's CUDA PyTorch). The generic amd64
+  # "Dockerfile" is for x86 GPU nodes and must be registered as a separate build —
+  # one ECR build can't produce a working GPU image for both arches.
   architectures:
-    - "linux/amd64"
     - "linux/arm64"
   directory: "."
-  dockerfile: "Dockerfile"
+  dockerfile: "Dockerfile.jetson-thor"
   # TODO: replace with the public GitHub repo URL once published.
   url: "https://github.com/waggle-sensor/bioclip2-vision-app"
 inputs:

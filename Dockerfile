@@ -1,38 +1,31 @@
-# Generic Sage GPU node build (amd64 + NVIDIA runtime). For Jetson Thor + CUDA,
-# see Dockerfile.jetson-thor. The plugin runs on GPU by default; CUDA torch is
-# installed here so it can use the host GPU via the NVIDIA container runtime.
+# Jetson Thor (arm64 + CUDA) build.
 #
-# Build (amd64, CUDA 12.4 wheels — default):
-#   docker build -t <registry>/bioclip2-vision:0.5.0 .
-# CPU-only image (local dry-run / VW; pair with ALLOW_CPU=1 at runtime):
-#   docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu -t ... .
-# Note: the CUDA torch wheels are x86_64-only. For arm64 GPU (Jetson) use
-# Dockerfile.jetson-thor instead.
-FROM python:3.12-slim-bookworm
+# THOR_BASE MUST be an arm64 image that already provides a CUDA build of PyTorch
+# AND torchvision for this Thor (that is why requirements.txt does not pin torch —
+# it inherits them from the base). Use the same base your other working GPU
+# containers on this node use (e.g. an NVIDIA L4T / JetPack PyTorch image).
+#
+# Build ON the Thor node so the image is arm64, then push to ECR:
+#   docker build -f Dockerfile.jetson-thor --build-arg THOR_BASE=<your-thor-pytorch-base> \
+#     -t registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.8.0 .
+#   docker login registry.sagecontinuum.org
+#   docker push registry.sagecontinuum.org/<namespace>/bioclip2-vision:0.8.0
+#
+# (ECR's cloud builder can only build this if THOR_BASE is pullable from a registry;
+#  otherwise build locally on the node and push the tag above.)
 
-ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
+ARG THOR_BASE=jetson-thor-plugin-base:local
+FROM ${THOR_BASE}
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    ffmpeg \
-    git \
-    libglib2.0-0 \
-    libgomp1 \
-    libjpeg62-turbo \
-    libopenblas0 \
-    libpng16-16 \
-    libsm6 \
-    libxext6 \
+# ffmpeg CLI + Python bindings (pywaggle vision / RTSP)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-
-# Install torch/torchvision first (CUDA build by default) so ultralytics /
-# open_clip_torch reuse it instead of pulling a CPU-only wheel.
-RUN pip3 install --no-cache-dir torch torchvision --index-url ${TORCH_INDEX_URL} \
- && pip3 install --no-cache-dir -r requirements.txt
+# torch/torchvision come from the base (CUDA build); pip should NOT replace them.
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
