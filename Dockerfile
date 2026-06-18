@@ -28,7 +28,9 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # HF_HUB_DISABLE_XET avoids the Xet CDN, which is often unreachable from build/edge nets.
 ENV HF_HOME=/opt/hf-cache \
     HF_HUB_DISABLE_XET=1
-RUN python3 -c "import open_clip; open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip-2')" \
+# Bake into the SAME cache_dir the runtime uses (detectors.py passes cache_dir=$HF_HOME
+# to open_clip, which treats it as the cache root directly — no "hub/" segment).
+RUN python3 -c "import os, open_clip; open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip-2', cache_dir=os.environ['HF_HOME'])" \
  && python3 -c "from huggingface_hub import hf_hub_download as d; import shutil, os; [shutil.move(d('imageomics/TreeOfLife-200M', f, repo_type='dataset', local_dir='/app/_emb'), '/app/'+os.path.basename(f)) for f in ('embeddings/txt_emb_bioclip-2.npy', 'embeddings/txt_emb_bioclip-2.json')]" \
  && rm -rf /app/_emb
 # Models are now cached in the image; do not attempt any HF network calls at runtime.

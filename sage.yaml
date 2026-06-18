@@ -1,5 +1,5 @@
 name: "bioclip2-vision"
-version: "0.14.0"
+version: "0.15.0"
 description: "Capture a camera frame and classify/localize organisms with BioCLIP 2 (default), BioCLIP 2.5 Huge, original BioCLIP, or YOLO; publish results to Sage. Runs on CPU or GPU."
 keywords: "vision,bioclip,bioclip2,bioclip2.5,yolo,species,taxonomy,camera,wildlife,hummingbird,gpu"
 authors: "MSA project; Imageomics (BioCLIP 2)"
